@@ -7,6 +7,10 @@ using c
 h{*}: extension = h
 c{*}: extension = c
 
+# Downloaded binary cache. Symlink only is a target, so clean keeps downloads.
+#
+config [dir_path] config.libnvapi.cache ?= $out_root
+
 # The test target for cross-testing (running tests under Wine, etc).
 #
 test.target = $c.target

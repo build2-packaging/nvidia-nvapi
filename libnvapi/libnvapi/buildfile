@@ -1,25 +1,114 @@
-intf_libs = # Interface dependencies.
-#import xxxx_libs += libhello%lib{hello}
+# Prebuilt NVAPI stubs for x86_64-windows (MSVC).
 
-lib{nvapi}: h{**} $intf_libs
+import intf_libs = libnvapi-headers%lib{nvapi-headers}
 
-# Build options.
+# Upstream ships Windows MSVC stubs only. There is no redistributable DLL.
 #
-c.poptions =+ "-I$out_root" "-I$src_root"
+enabled = ($c.target.class == 'windows' && \
+           $c.target.cpu == 'x86_64' && \
+           $c.target.system != 'mingw32')
 
-# Export options.
+# Map of upstream file names. Keys: <c.target.system>-<liba>.
 #
-lib{nvapi}:
+upstream_libs = [dir_path] "$src_base/lib"
+has_upstream = [bool] $directory_exists($upstream_libs)
+
+# Listing used only to generate the map. Keep out of dist and default update.
+#
+./: file{lib/**}: include = false
+file{lib/**}: dist = false
+
+./: buildfile{nvapi-binaries.build}
+
+buildfile{nvapi-binaries.build}:
 {
-  c.export.poptions = "-I$out_root" "-I$src_root"
-  c.export.libs = $intf_libs
+  dist = true
+  clean = ($src_root != $out_root)
 }
 
-# Install into the libnvapi/ subdirectory of, say, /usr/include/
-# recreating subdirectories.
+# Recipe: generate from upstream, or copy the shipped fragment. The ./:
+# declaration above is unconditional. This if only selects the recipe.
 #
-h{*}:
+if $has_upstream
 {
-  install         = include/libnvapi/
-  install.subdirs = true
+  stubs = [paths] $path_search('nvapi64.lib', $upstream_libs)
+  assert ($size($stubs) > 0) \
+    "no nvapi64.lib in lib/"
+
+  buildfile{nvapi-binaries.build}:
+  {{
+    diag gen $>
+    echo "# Generated from upstream/amd64. Do not edit." >$path($>)
+    echo "nvapi_bins = [string_map] \\" >>$path($>)
+    echo "  win32-msvc-liba@nvapi64.lib" >>$path($>)
+  }}
+}
+else
+{
+  buildfile{nvapi-binaries.build}:
+  {{
+    diag cp $>
+
+    # Copying onto itself empties the file.
+    #
+    if ($src_root != $out_root)
+      cp $src_base/nvapi-binaries.build $path($>)
+    else
+      touch --after $src_base/nvapi-binaries.build $path($>)
+  }}
+}
+
+# During dist the generate recipe runs via dist = true. Load-time update
+# would race that, and nvapi_bins is only needed for download target names.
+#
+if ($build.meta_operation != 'dist')
+{
+  update buildfile{nvapi-binaries.build}
+  source $path(buildfile{nvapi-binaries.build})
+
+  # Submodule commit NVIDIA/nvapi@70d337d (R615). No version tags upstream.
+  #
+  nvapi_base_url = "https://raw.githubusercontent.com/NVIDIA/nvapi/70d337db9186e968eab622f7e786de7e437faf3d/amd64"
+
+  stub_name = [string] ($nvapi_bins[win32-msvc-liba])
+  assert ($stub_name != [null]) "nvapi_bins missing win32-msvc-liba"
+  stub = [path] "$out_base/$stub_name"
+
+  liba{$stub}:
+  {{
+    cache = [dir_path] $config.libnvapi.cache
+
+    depdb hash $nvapi_base_url
+    diag curl $nvapi_base_url -> $>
+
+    mkdir --no-cleanup -p $cache
+
+    name = [string] $leaf($path($>))
+    dest = [path] $cache/$name
+    part = [path] "$(dest).part"
+
+    test -f $dest || \
+      curl -\# --fail --location --output $part "$nvapi_base_url/$name"
+    test -f $part && \
+      rm -f $dest && mv $part $dest &!$dest || true
+    rm -f $path($>) && \
+      ln --symbolic $dest $path($>)
+    touch $path($>)
+  }}
+
+  ./: lib{nvapi}: include = $enabled
+
+  [rule_hint=c.link] \
+  lib{nvapi}: $intf_libs: include = $enabled
+
+  lib{nvapi}: liba{$stub}: include = $enabled
+
+  if $enabled
+  {
+    lib{nvapi}:
+    {
+      cc.type = cc
+      cc.export.libs += $intf_libs liba{$stub}
+    }
+  }
 }
