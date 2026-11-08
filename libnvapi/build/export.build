@@ -1,0 +1,6 @@
+$out_root/
+{
+  include libnvapi/
+}
+
+export $out_root/libnvapi/$import.target

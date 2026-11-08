@@ -1,0 +1,25 @@
+intf_libs = # Interface dependencies.
+#import xxxx_libs += libhello%lib{hello}
+
+lib{nvapi}: h{**} $intf_libs
+
+# Build options.
+#
+c.poptions =+ "-I$out_root" "-I$src_root"
+
+# Export options.
+#
+lib{nvapi}:
+{
+  c.export.poptions = "-I$out_root" "-I$src_root"
+  c.export.libs = $intf_libs
+}
+
+# Install into the libnvapi/ subdirectory of, say, /usr/include/
+# recreating subdirectories.
+#
+h{*}:
+{
+  install         = include/libnvapi/
+  install.subdirs = true
+}
