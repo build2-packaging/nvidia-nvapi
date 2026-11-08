@@ -1,6 +1,6 @@
 : 1
 name: libnvapi-headers
-version: 615.0.0-a.0.z
+version: 615.0.0
 upstream-version: R615
 type: lib,binless
 language: c
