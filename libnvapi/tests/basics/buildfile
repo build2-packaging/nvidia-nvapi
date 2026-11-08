@@ -1,3 +1,6 @@
 import libs = libnvapi%lib{nvapi}
 
-exe{driver}: {h c}{**} $libs testscript{**}
+windows = ($c.target.class == 'windows')
+
+./: exe{driver}: include = $windows
+exe{driver}: {h c}{**} $libs testscript{**}: include = $windows
